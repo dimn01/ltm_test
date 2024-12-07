@@ -112,7 +112,7 @@ app.post('/api/reset', (req, res) => {
     res.json({ message: '대화 기록이 초기화되었습니다.' });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 7071;
 app.listen(PORT, () => {
     console.log(`서버가 포트 ${PORT}에서 실행중입니다.`);
 });

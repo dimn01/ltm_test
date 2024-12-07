@@ -31,7 +31,7 @@ const WebTerminal = () => {
     setIsTyping(true);
 
     try {
-      const response = await fetch('http://localhost:3001/api/chat', {
+      const response = await fetch('http://castberry.kr:7071/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ const WebTerminal = () => {
 
   const handleReset = async () => {
     try {
-      await fetch('http://localhost:3001/api/reset', {
+      await fetch('http://castberry.kr:7071/api/reset', {
         method: 'POST',
       });
       setHistory([
