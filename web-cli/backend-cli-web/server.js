@@ -49,34 +49,6 @@ app.post('/api/chat', async (req, res) => {
             content: message
         });
 
-        const body = JSON.stringify({
-
-        });
-
-        // const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent', {
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //         "X-goog-api-key": process.env.GEMINI_API_KEY,
-        //     },
-        //     body: body
-        //     // JSON.stringify({
-        //     //     contents: [
-        //     //         ...conversationLog.map((msg) => ({
-        //     //             role: msg.role === "user" ? "user" : "model",
-        //     //             parts: [{ text: msg.content }],
-        //     //         })),
-        //     //     ],
-        //     //     systemInstruction: {
-        //     //         parts: [{ text: RAINIT_PERSONA }],
-        //     //     },
-        //     //     generationConfig: {
-        //     //         temperature: 0.7,
-        //     //         maxOutputToken: 4096,
-        //     //     }
-        //     // }),
-        // });
-
         // Start a new chat session with the conversation history
         const chat = model.startChat({
             history: conversationLog.map(item => ({
@@ -113,7 +85,7 @@ app.post('/api/chat', async (req, res) => {
             }
         }
 
-        // Save the full assistant response once the stream is complete
+        // 어시스턴트 응답 저장
         if (assistantResponse) {
             saveConversation({
                 role: 'assistant',
@@ -131,46 +103,6 @@ app.post('/api/chat', async (req, res) => {
             details: error.message,
         });
     }
-
-    //     const reader = response.body.getReader();
-    //     const decoder = new TextDecoder();
-    //     let assistantResponse = "";
-
-    //     while(True) {
-    //         const { value, done } = await reader.read();
-    //         if (done) break;
-
-    //         const chunk = decoder.decode(value, { stream: true });
-
-    //         // chunck 단위 json 파싱
-    //         const lines = chunk.split('\n').filter((line) => line.trim());
-    //         for (const line of lines) {
-    //             try {
-    //                 const data = JSON.parse(line);
-    //                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    //                 if (text) {
-    //                     assistantResponse += text;
-    //                     res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    //                 }
-    //             } catch (e) {
-    //                 console.error('Gemini 청크 파싱 error: ', e, line);
-    //             }
-    //         }
-    //     }
-        
-    //     if (assistantResponse) {
-    //         saveConversation({ role: 'model', content: assistantResponse});
-    //     }
-
-    //     res.write('data: [DONE]\n\n');
-    //     res.end();
-    // } catch (error) {
-    //     console.error('에러 발생: ', error);
-    //     res.status(500).json({
-    //         error: '서버 에러 발생',
-    //         details: error.message,
-    //     });
-    // }
 
 
         // Claude API 호출을 위한 설정
