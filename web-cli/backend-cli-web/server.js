@@ -3,6 +3,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import axios from 'axios';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -31,6 +32,13 @@ const saveConversation = (message) => {
     conversationLog.push(message);
 };
 
+// Initialize the Gemini AI model
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    systemInstruction: RAINIT_PERSONA
+});
+
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body;
@@ -41,69 +49,193 @@ app.post('/api/chat', async (req, res) => {
             content: message
         });
 
-        // Claude API 호출을 위한 설정
-        const response = await axios.post('https://api.anthropic.com/v1/messages', {
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 4096,
-            messages: conversationLog,
-            system: RAINIT_PERSONA,
-            temperature: 0.7,
-            stream: true
-        }, {
-            headers: {
-                'Content-Type': 'application/json',
-                'anthropic-version': '2023-06-01',
-                'x-api-key': process.env.CLAUDE_API_KEY
-            },
-            responseType: 'stream'
+        const body = JSON.stringify({
+
         });
 
-        // SSE 설정
-        res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
+        // const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent', {
+        //     method: 'POST',
+        //     headers: {
+        //         'Content-Type': 'application/json',
+        //         "X-goog-api-key": process.env.GEMINI_API_KEY,
+        //     },
+        //     body: body
+        //     // JSON.stringify({
+        //     //     contents: [
+        //     //         ...conversationLog.map((msg) => ({
+        //     //             role: msg.role === "user" ? "user" : "model",
+        //     //             parts: [{ text: msg.content }],
+        //     //         })),
+        //     //     ],
+        //     //     systemInstruction: {
+        //     //         parts: [{ text: RAINIT_PERSONA }],
+        //     //     },
+        //     //     generationConfig: {
+        //     //         temperature: 0.7,
+        //     //         maxOutputToken: 4096,
+        //     //     }
+        //     // }),
+        // });
+
+        // Start a new chat session with the conversation history
+        const chat = model.startChat({
+            history: conversationLog.map(item => ({
+                role: item.role === 'user' ? 'user' : 'model',
+                parts: [{ text: item.content }]
+            })),
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 4096,
+            },
         });
+        
+        // Generate a streamed response
+        const result = await chat.sendMessageStream(message);
+    
+        // if(!response.ok) {
+        //     throw new Error(`Gemini API error: ${response.statusText}`)
+        // }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/evnet-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        })
 
         let assistantResponse = '';
 
-        response.data.on('data', chunk => {
-            const lines = chunk.toString('utf8').split('\n').filter(line => line.trim());
-            
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.type === 'content_block_delta' && data.delta?.text) {
-                            assistantResponse += data.delta.text;
-                            res.write(`data: ${JSON.stringify({ text: data.delta.text })}\n\n`);
-                        }
-                    } catch (parseError) {
-                        console.error('청크 파싱 오류:', parseError);
-                    }
-                }
+        // Handle the stream chunks
+        for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+                assistantResponse += text;
+                res.write(`data: ${JSON.stringify({ text: text })}\n\n`);
             }
-        });
+        }
 
-        response.data.on('end', () => {
-            // 어시스턴트 응답 저장
-            if (assistantResponse) {
-                saveConversation({
-                    role: 'assistant',
-                    content: assistantResponse
-                });
-            }
-            res.write('data: [DONE]\n\n');
-            res.end();
-        });
+        // Save the full assistant response once the stream is complete
+        if (assistantResponse) {
+            saveConversation({
+                role: 'assistant',
+                content: assistantResponse
+            });
+        }
+        
+        res.write('data: [DONE]\n\n');
+        res.end();
 
     } catch (error) {
-        console.error('에러 발생:', error);
+        console.error('Error occurred:', error);
         res.status(500).json({ 
-            error: '서버 에러가 발생했습니다.',
-            details: error.message 
+            error: 'Server error occurred.',
+            details: error.message,
         });
     }
+
+    //     const reader = response.body.getReader();
+    //     const decoder = new TextDecoder();
+    //     let assistantResponse = "";
+
+    //     while(True) {
+    //         const { value, done } = await reader.read();
+    //         if (done) break;
+
+    //         const chunk = decoder.decode(value, { stream: true });
+
+    //         // chunck 단위 json 파싱
+    //         const lines = chunk.split('\n').filter((line) => line.trim());
+    //         for (const line of lines) {
+    //             try {
+    //                 const data = JSON.parse(line);
+    //                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    //                 if (text) {
+    //                     assistantResponse += text;
+    //                     res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    //                 }
+    //             } catch (e) {
+    //                 console.error('Gemini 청크 파싱 error: ', e, line);
+    //             }
+    //         }
+    //     }
+        
+    //     if (assistantResponse) {
+    //         saveConversation({ role: 'model', content: assistantResponse});
+    //     }
+
+    //     res.write('data: [DONE]\n\n');
+    //     res.end();
+    // } catch (error) {
+    //     console.error('에러 발생: ', error);
+    //     res.status(500).json({
+    //         error: '서버 에러 발생',
+    //         details: error.message,
+    //     });
+    // }
+
+
+        // Claude API 호출을 위한 설정
+    //     const response = await axios.post('https://api.anthropic.com/v1/messages', {
+    //         model: 'claude-3-5-sonnet-20241022',
+    //         max_tokens: 4096,
+    //         messages: conversationLog,
+    //         system: RAINIT_PERSONA,
+    //         temperature: 0.7,
+    //         stream: true
+    //     }, {
+    //         headers: {
+    //             'Content-Type': 'application/json',
+    //             'anthropic-version': '2023-06-01',
+    //             'x-api-key': process.env.CLAUDE_API_KEY
+    //         },
+    //         responseType: 'stream'
+    //     });
+
+    //     // SSE 설정
+    //     res.writeHead(200, {
+    //         'Content-Type': 'text/event-stream',
+    //         'Cache-Control': 'no-cache',
+    //         'Connection': 'keep-alive'
+    //     });
+
+    //     let assistantResponse = '';
+
+    //     response.data.on('data', chunk => {
+    //         const lines = chunk.toString('utf8').split('\n').filter(line => line.trim());
+            
+    //         for (const line of lines) {
+    //             if (line.startsWith('data: ')) {
+    //                 try {
+    //                     const data = JSON.parse(line.slice(6));
+    //                     if (data.type === 'content_block_delta' && data.delta?.text) {
+    //                         assistantResponse += data.delta.text;
+    //                         res.write(`data: ${JSON.stringify({ text: data.delta.text })}\n\n`);
+    //                     }
+    //                 } catch (parseError) {
+    //                     console.error('청크 파싱 오류:', parseError);
+    //                 }
+    //             }
+    //         }
+    //     });
+
+    //     response.data.on('end', () => {
+    //         // 어시스턴트 응답 저장
+    //         if (assistantResponse) {
+    //             saveConversation({
+    //                 role: 'assistant',
+    //                 content: assistantResponse
+    //             });
+    //         }
+    //         res.write('data: [DONE]\n\n');
+    //         res.end();
+    //     });
+
+    // } catch (error) {
+    //     console.error('에러 발생:', error);
+    //     res.status(500).json({ 
+    //         error: '서버 에러가 발생했습니다.',
+    //         details: error.message 
+    //     });
+    // }
 });
 
 // 대화 기록 초기화 엔드포인트
