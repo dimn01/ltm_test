@@ -39,45 +39,20 @@ const WebTerminal = () => {
         body: JSON.stringify({ message: userInput }),
       });
 
-      if (!response.ok) throw new Error('Network response was not ok');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantResponse = '';
-
-      setHistory(prev => [...prev, { type: 'assistant', content: '' }]);
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) {
-                assistantResponse += parsed.text;
-                setHistory(prev => {
-                  const newHistory = [...prev];
-                  newHistory[newHistory.length - 1] = {
-                    type: 'assistant',
-                    content: assistantResponse
-                  };
-                  return newHistory;
-                });
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
-            }
-          }
-        }
+      if (!response.ok) {
+        throw new Error(`Server returned status: ${response.status}`);
       }
+
+      // **변경점 시작: JSON 응답을 바로 처리**
+      const data = await response.json();
+      const assistantResponse = data.text;
+
+      setHistory(prev => [
+        ...prev,
+        { type: 'assistant', content: assistantResponse }
+      ]);
+      // **변경점 끝**
+
     } catch (error) {
       console.error('Error:', error);
       setHistory(prev => [...prev, {
